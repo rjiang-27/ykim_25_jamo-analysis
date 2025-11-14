@@ -1,0 +1,33 @@
+---
+title: "Jamo Analysis"
+author: "Ryan Jiang"
+format: pdf
+editor: visual
+---
+
+## Quarto
+
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(stringr)
+library(dplyr)
+```
+
+
+
+
+
+```{r}
+
+unique <- unique_database
+
+selected <- unique |>
+  select("Jamo_Rule_Matrix")
+
+selected[1,]
+
+
+```
+
