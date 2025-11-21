@@ -20,15 +20,15 @@ unique <- unique_database
 ```
 
 ```{r}
-
+# Checking the forms of the Jamo_Rule_Matrix column
 selected <- unique |>
   select("Jamo_Rule_Matrix")
 
 glimpse(selected[1,])
 
+# nearly 50% of all words and phrases in the database of hangul words contain the Jamo Unicode U+1100
 unique |>
   summarize(prop_included = mean(str_detect(Jamo_Cleaned_Unicode, "U\\+1100")))
-  
 
 only_U_1100 <- unique |>
   filter(str_detect(Jamo_Cleaned_Unicode, "U\\+1100"))
@@ -39,7 +39,7 @@ exclude_U_1100 <- unique |>
 ```
 
 ```{r}
-
+# Creates a summation of the appearance of all the rules across the dataset - Not moving in this direction anymore, check google doc
 rules_summary <- only_U_1100 |>
   mutate(rule_sums = map(Jamo_Rule_Matrix, ~ colSums(.x[,-1], na.rm = TRUE))) |>
   pull(rule_sums) |>
@@ -49,6 +49,8 @@ rules_summary <- only_U_1100 |>
 ```
 
 ```{r}
+# NOT DOING THIS ANYMORE
+
 U_1100_rules_counts <- rules_summary |>
   pivot_longer(everything(), names_to = "rule", values_to = "count")
 
@@ -66,24 +68,29 @@ ggplot(U_1100_rules_counts, aes(x = reorder(rule, count), y = count)) +
 
 
 ```{r}
-# nearly 50% of all words and phrases in the database of hangul words contain the Jamo Unicode U+1100
+
+# Creates a list of all of the unique Unicodes found in the Jamo_Cleaned_Unicode, check if all are accounted for
 unicode_list <- unique |>
   mutate(uc = str_extract_all(Jamo_Cleaned_Unicode, "U\\+[0-9A-F]{4}")) |>
   unnest(uc) |>
   distinct(uc) |>
   pull(uc)
 
+# Turns the unique unicodes into an iterate-able list
 unicode_proportions <- vector("list", length(unicode_list))
 
+# Iterate through each unicode in the list and create a tibble with each unicode and their respective proportions
 for (i in seq_along(unicode_list)) {
   u <- unicode_list[i]
     
-  unicode_proportions[[i]] <- tibble(
+  unicode_proportions[[i]] <- data.frame(
     unicode = u,
-    prop_included = mean(str_detect(unique[["Jamo_Cleaned_Unicode"]], fixed(u)))
+    prop_included = mean(str_detect(unique[["Jamo_Cleaned_Unicode"]], fixed(u))),
+    stringsAsFactors = FALSE
   )
 }
 
+# Turns tibble into a dataframe
 unicode_df <- bind_rows(unicode_proportions)
 
 ggplot(unicode_df, aes(x = reorder(unicode, prop_included), y = prop_included)) +
@@ -94,6 +101,50 @@ ggplot(unicode_df, aes(x = reorder(unicode, prop_included), y = prop_included)) 
     x = "Proportion Included",
     y = "Jamo Unicode",
     title = "Proportion of Each Unicode in the Dataset"
+  )
+
+```
+
+
+```{r}
+
+
+rule_1_filtered <- unique %>% 
+  filter(!map_lgl(Jamo_Rule_Matrix, ~ any(.x[, "rule_1"] == 1)))
+
+######
+
+rules <- colnames(unique$Jamo_Rule_Matrix[[1]])[-1]
+ 
+rule_proportions <- vector("list", length(rules))
+
+for (i in seq_along(rules)) {
+  r <- rules[i]
+  
+  # Logical vector: TRUE = row contains rule = 1 at least once
+  contains_rule <- map_lgl(unique$Jamo_Rule_Matrix, ~ any(.x[, r] == 1))
+  
+  # Compute proportion removed
+  proportion_removed <- mean(contains_rule)
+  
+  # Save as small data frame
+  rule_proportions[[i]] <- tibble(
+    rule = r,
+    prop_removed = proportion_removed
+  )
+}
+
+# Combine list into a single dataframe
+rule_proportion_df <- bind_rows(rule_proportions)
+
+ggplot(rule_proportion_df, aes(x = reorder(rule, prop_removed), y = prop_removed)) +
+  geom_col() +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    x = "Proportion Removed",
+    y = "Rules",
+    title = "Proportion of Words Removed Upon Removing Certain Rules"
   )
 
 ```
