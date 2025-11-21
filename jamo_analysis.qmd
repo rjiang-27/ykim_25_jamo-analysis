@@ -93,7 +93,7 @@ for (i in seq_along(unicode_list)) {
 # Turns tibble into a dataframe
 unicode_df <- bind_rows(unicode_proportions)
 
-ggplot(unicode_df, aes(x = reorder(unicode, prop_included), y = prop_included)) +
+unicode_proportions <- ggplot(unicode_df, aes(x = reorder(unicode, prop_included), y = prop_included)) +
   geom_col() +
   coord_flip() +
   theme_minimal() +
@@ -102,6 +102,8 @@ ggplot(unicode_df, aes(x = reorder(unicode, prop_included), y = prop_included)) 
     y = "Jamo Unicode",
     title = "Proportion of Each Unicode in the Dataset"
   )
+
+ggsave("unicode_proportions.pdf", plot = unicode_proportions, width = 8, height = 6)
 
 ```
 
@@ -121,23 +123,19 @@ rule_proportions <- vector("list", length(rules))
 for (i in seq_along(rules)) {
   r <- rules[i]
   
-  # Logical vector: TRUE = row contains rule = 1 at least once
   contains_rule <- map_lgl(unique$Jamo_Rule_Matrix, ~ any(.x[, r] == 1))
   
-  # Compute proportion removed
   proportion_removed <- mean(contains_rule)
   
-  # Save as small data frame
   rule_proportions[[i]] <- tibble(
     rule = r,
     prop_removed = proportion_removed
   )
 }
 
-# Combine list into a single dataframe
 rule_proportion_df <- bind_rows(rule_proportions)
 
-ggplot(rule_proportion_df, aes(x = reorder(rule, prop_removed), y = prop_removed)) +
+rule_removed_proportions <- ggplot(rule_proportion_df, aes(x = reorder(rule, prop_removed), y = prop_removed)) +
   geom_col() +
   coord_flip() +
   theme_minimal() +
@@ -147,6 +145,7 @@ ggplot(rule_proportion_df, aes(x = reorder(rule, prop_removed), y = prop_removed
     title = "Proportion of Words Removed Upon Removing Certain Rules"
   )
 
+ggsave("rule_removed_proportions.pdf", plot = rule_removed_proportions, width = 8, height = 6)
 ```
 
 
