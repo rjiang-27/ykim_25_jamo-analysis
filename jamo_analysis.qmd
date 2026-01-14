@@ -374,54 +374,6 @@ walk(grammatical_parts, function(parts) {
 ```
 
 
-```{r}
-# 1. Create a clean version of the totals BEFORE splitting Jamo
-# This ensures a word with 3 Jamo doesn't count as 3 words in the denominator
-parts_totals_clean <- clean_unique |>
-  separate_rows(품사, sep = "\\s*,\\s*") |>
-  group_by(품사) |>
-  summarize(total_freq = sum(freq, na.rm = TRUE), .groups = "drop")
-
-# 2. Now create the long data for the numerator (the specific Jamo counts)
-jamo_parts_prop <- clean_unique |>
-  separate_rows(품사, sep = "\\s*,\\s*") |>
-  separate_rows(Jamo_Cleaned_Unicode, sep = "\\s+") |>
-  distinct(어휘_cleaned, 품사, Jamo_Cleaned_Unicode, freq) |>
-  group_by(품사, Jamo_Cleaned_Unicode) |>
-  summarize(
-    removed_freq = sum(freq),
-    .groups = "drop"
-  ) |>
-  # 3. Join with the clean totals
-  left_join(parts_totals_clean, by = "품사") |>
-  mutate(
-    prop_removed = removed_freq / total_freq
-  ) |>
-  rename(jamo_unicode = Jamo_Cleaned_Unicode)
-
-# 4. Plotting (Adding scale_y_continuous to fix the 0-100% view)
-walk(grammatical_parts, function(parts) {
-  df <- jamo_parts_prop |> filter(품사 == parts)
-  if (nrow(df) == 0) return(NULL)
-
-  p <- ggplot(df, aes(x = reorder(jamo_unicode, prop_removed), y = prop_removed)) +
-    geom_col(fill = "steelblue") +
-    coord_flip() +
-    # This ensures the axis represents 0 to 100% clearly
-    scale_y_continuous(labels = scales::percent_format(), limits = c(0, NA)) +
-    theme_minimal() +
-    labs(
-      x = "Jamo Unicode",
-      y = "Proportion of Category Affected",
-      title = paste("Impact of Jamo Removal —", parts),
-      subtitle = "Shows % of words in this category containing this specific Jamo"
-    )
-
-  print(p)
-})
-```
-
-
 
 ```{r}
 # WORD ORIGINS
