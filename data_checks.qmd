@@ -1,0 +1,28 @@
+---
+title: "Checking Data"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(stringr)
+library(dplyr)
+library(purrr)
+
+unique <- readRDS("~/YKim-Linguistics/ykim_korean-analysis/unique_database.rds")
+```
+
+```{r}
+unique_check <- unique |>
+  mutate(
+    n_jamo = str_count(Jamo_Cleaned_Unicode, "\\S+") ,  
+    n_ipa  = str_count(IPA_Syllable_Unicode, "\\S+")
+  ) |>
+  mutate(equal_length = n_jamo == n_ipa)
+
+unique_check |>
+  filter(equal_length == FALSE)
+```
+
