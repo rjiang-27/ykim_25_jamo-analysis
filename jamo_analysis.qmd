@@ -157,7 +157,7 @@ rule_removed_proportions <- ggplot(rule_proportion_df, aes(x = reorder(rule, pro
   labs(
     y = "Proportion Removed",
     x = "Rules",
-    title = "Proportion of Words Removed Upon Removing Certain Rules"
+    title = "Proportion of Each Rule in the Dataset"
   )
 
 ggsave("rule_removed_proportions.pdf", plot = rule_removed_proportions, width = 8, height = 6)
