@@ -16,7 +16,11 @@ library(purrr)
 ```
 
 ```{r}
-unique <- readRDS("~/YKim-Linguistics/ykim_korean-analysis/unique_database.rds")
+unique <- readRDS("~/YKim-Linguistics/ykim_korean-analysis/Data/unique_database.rds")
+
+# no column 3, 5, 6 from unique database
+clean_unique_database <- readRDS("~/YKim-Linguistics/ykim_korean-analysis/Data/clean_unique_database.rds")
+
 ```
 
 ```{r}
@@ -64,6 +68,7 @@ for (i in seq_along(unicode_list)) {
   u <- unicode_list[i]
   unicode_proportions[[i]] <- data.frame(
     unicode = u,
+    count = sum(str_detect(unique[["Jamo_Cleaned_Unicode"]], fixed(u))),
     prop_included = mean(str_detect(unique[["Jamo_Cleaned_Unicode"]], fixed(u))),
     stringsAsFactors = FALSE
   )
@@ -84,6 +89,25 @@ unicode_proportions <- ggplot(unicode_df, aes(x = reorder(unicode, prop_included
 
 ggsave("unicode_proportions.pdf", plot = unicode_proportions, width = 8, height = 6)
 
+unicode_counts <- ggplot(unicode_df, aes(x = reorder(unicode, count), y = count)) +
+  geom_col() +
+  geom_text(
+    aes(label = count),
+    hjust = -0.1,
+    size = 2,
+    fontface = "italic"
+  ) +
+  coord_flip() +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  theme_minimal() +
+  labs(
+    y = "Total Counts",
+    x = "Jamo Unicode",
+    title = "Counts of Each Jamo Unicode in the Dataset"
+  )
+
+ggsave("unicode_counts.pdf", plot = unicode_counts, width = 8, height = 6)
+
 ```
 
 ```{r}
@@ -102,6 +126,7 @@ for (i in seq_along(ipa_unicode_list)) {
   u <- ipa_unicode_list[i]
   ipa_unicode_proportions[[i]] <- data.frame(
     unicode = u,
+    count = sum(str_detect(unique[["IPA_Syllable_Unicode"]], fixed(u))),
     prop_included = mean(str_detect(unique[["IPA_Syllable_Unicode"]], fixed(u))),
     stringsAsFactors = FALSE
   )
@@ -122,6 +147,25 @@ ipa_unicode_proportions <- ggplot(ipa_unicode_df, aes(x = reorder(unicode, prop_
 
 ggsave("ipa_unicode_proportions.pdf", plot = ipa_unicode_proportions, width = 8, height = 6)
 
+ipa_unicode_counts <- ggplot(ipa_unicode_df, aes(x = reorder(unicode, count), y = count)) +
+  geom_col() +
+  geom_text(
+    aes(label = count),
+    hjust = -0.1,
+    size = 2,
+    fontface = "italic"
+  ) +
+  coord_flip() +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  theme_minimal() +
+  labs(
+    y = "Total Counts",
+    x = "IPA Unicode",
+    title = "Counts of Each IPA Unicode in the Dataset"
+  )
+
+ggsave("ipa_unicode_counts.pdf", plot = ipa_unicode_counts, width = 8, height = 6)
+
 ```
 
 ```{r}
@@ -135,13 +179,12 @@ rule_proportions <- vector("list", length(rules))
 # iterating through each rule and detecting if the matrices contain the rule
 for (i in seq_along(rules)) {
   r <- rules[i]
-  
   contains_rule <- map_lgl(unique$Jamo_Rule_Matrix, ~ any(.x[, r] == 1))
-  
+  count_removed <- sum(contains_rule)
   proportion_removed <- mean(contains_rule)
-  
   rule_proportions[[i]] <- tibble(
     rule = r,
+    counts = count_removed,
     prop_removed = proportion_removed
   )
 }
@@ -150,7 +193,7 @@ rule_proportion_df <- bind_rows(rule_proportions)
 
 
 # plotting df
-rule_removed_proportions <- ggplot(rule_proportion_df, aes(x = reorder(rule, prop_removed), y = prop_removed)) +
+rule_proportions <- ggplot(rule_proportion_df, aes(x = reorder(rule, prop_removed), y = prop_removed)) +
   geom_col() +
   coord_flip() +
   theme_minimal() +
@@ -160,7 +203,26 @@ rule_removed_proportions <- ggplot(rule_proportion_df, aes(x = reorder(rule, pro
     title = "Proportion of Each Rule in the Dataset"
   )
 
-ggsave("rule_removed_proportions.pdf", plot = rule_removed_proportions, width = 8, height = 6)
+ggsave("rule_proportions.pdf", plot = rule_proportions, width = 8, height = 6)
+
+rule_counts <- ggplot(rule_proportion_df, aes(x = reorder(rule, counts), y = counts)) +
+  geom_col() +
+  geom_text(
+    aes(label = counts),
+    hjust = -0.1,
+    size = 2,
+    fontface = "italic"
+  ) +
+  coord_flip() +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  theme_minimal() +
+  labs(
+    y = "Total Counts",
+    x = "Rules",
+    title = "Count of Each Rule in the Dataset"
+  )
+
+ggsave("rule_counts.pdf", plot = rule_counts, width = 8, height = 6)
 
 ```
 
@@ -183,11 +245,13 @@ unicode_freq <- clean_unique |>
   mutate(uni = str_extract_all(Jamo_Cleaned_Unicode, "U\\+[0-9A-F]{4}")) |>
   unnest(uni) |>
   group_by(uni) |>
-  summarize(total_freq = sum(freq), .groups = "drop")
+  summarize(total_freq = sum(total_instances), .groups = "drop")
 
 # calculate the proportion
 unicode_freq <- unicode_freq |>
-  mutate(prop = total_freq / sum(total_freq))
+  mutate(
+    prop = total_freq / sum(total_freq)
+    )
 
 unicode_freq |>
   summarize(sum = sum(prop))
@@ -214,7 +278,14 @@ ggsave("clean_uni_proportions.pdf", plot = clean_uni_proportions, width = 8, hei
 clean_uni_freq <- unicode_freq |>
   ggplot(aes(x = reorder(uni, total_freq), y = total_freq)) +
   geom_col() +
+  geom_text(
+    aes(label = total_freq),
+    hjust = -0.1,
+    size = 2,
+    fontface = "italic"
+  ) +
   coord_flip() +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
   theme_minimal() +
   labs(
     x = "Unicode",
@@ -231,17 +302,18 @@ ggsave("clean_uni_frequencies.pdf", plot = clean_uni_freq, width = 8, height = 6
 clean_uni_rule_proportions <- vector("list", length(rules))
 
 # iterate through each rule and check in the word list with only frequency values to find proportion of words removed based on rule
-total_freq <- sum(clean_unique$freq, na.rm = TRUE)
+total_freq <- sum(clean_unique$total_instances, na.rm = TRUE)
 
 for (i in seq_along(rules)) {
   r <- rules[i]
   
   contains_rule <- map_lgl(clean_unique$Jamo_Rule_Matrix, ~ any(.x[, r] == 1))
-  
-  weighted_prop <- sum(clean_unique$freq[contains_rule], na.rm = TRUE) / total_freq
+  counts <- sum(clean_unique$total_instances[contains_rule], na.rm = TRUE)
+  weighted_prop <- sum(clean_unique$total_instances[contains_rule], na.rm = TRUE) / total_freq
   
   clean_uni_rule_proportions[[i]] <- tibble(
     rule = r,
+    counts = counts,
     prop_weighted = weighted_prop
   )
 }
@@ -256,10 +328,32 @@ clean_uni_rule_prop <- clean_uni_rule_proportion_df |>
   labs(
     x = "Rule",
     y = "Rule Proportion",
-    title = "Rule Proportions Removed (Weighted by Word Frequencies)"
+    title = "Rule Proportions (Weighted by Word Frequencies)"
   )
 
 ggsave("clean_uni_rule_prop.pdf", plot = clean_uni_rule_prop, width = 8, height = 6)
+
+clean_uni_rule_count <- clean_uni_rule_proportion_df |>
+  ggplot(aes(x = reorder(rule, counts), y = counts)) +
+  geom_col() +
+  geom_text(
+    aes(label = counts),
+    hjust = -0.1,
+    size = 2,
+    fontface = "italic"
+  ) +
+  coord_flip() +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  theme_minimal() +
+  labs(
+    x = "Rule",
+    y = "Rule Count",
+    title = "Rule Count (Weighted by Word Frequencies)"
+  )
+
+ggsave("clean_uni_rule_count.pdf", plot = clean_uni_rule_count, width = 8, height = 6)
+
+
 ```
 
 
