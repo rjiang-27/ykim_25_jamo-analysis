@@ -8,18 +8,20 @@ editor: visual
 
 
 ```{r}
+library(maps)
 library(tidyverse)
 library(ggplot2)
 library(stringr)
 library(dplyr)
 library(purrr)
+library(scales)
 ```
 
 ```{r}
 unique <- readRDS("~/YKim-Linguistics/ykim_korean-analysis/Data/unique_database.rds")
 
 # no column 3, 5, 6 from unique database
-clean_unique_database <- readRDS("~/YKim-Linguistics/ykim_korean-analysis/Data/clean_unique_database.rds")
+# clean_unique_database <- readRDS("~/YKim-Linguistics/ykim_korean-analysis/Data/clean_unique_database.rds")
 
 ```
 
@@ -51,63 +53,166 @@ clean_unique_database <- readRDS("~/YKim-Linguistics/ykim_korean-analysis/Data/c
 
 ```
 
-```{r}
+Working with frequency values rather than the unique word set to account for relevance and usage of certain words for more realistic distributions.
 
-# creates a list of all of the existing Jamo Unicodes
-unicode_list <- unique |>
+```{r}
+# dataset with only values with frequency and proportions
+clean_unique <- unique |>
+  filter(!is.na(total_instances), !is.na(freq))
+
+# dataset with only values without frequency and proportions
+na_unique <- unique |>
+  filter(is.na(total_instances), is.na(freq))
+```
+
+Jamo Unicode Analysis
+```{r}
+# JAMO UNICODE ANALYSIS
+########################################################################################################################################
+
+# UNWEIGHTED
+#------------------------------------------------------------------------------------------------------------
+# PROPORTION PLOT
+
+unicode_count <- unique |>
+  mutate(word_id = row_number()) |>
   mutate(uc = str_extract_all(Jamo_Cleaned_Unicode, "U\\+[0-9A-F]{4}")) |>
   unnest(uc) |>
-  distinct(uc) |>
-  pull(uc)
+  # keep only one instance of a unicode per word
+  distinct(word_id, uc, .keep_all = TRUE) 
 
-# pre-allocation of list size
-unicode_proportions <- vector("list", length(unicode_list))
+total_unique_words <- nrow(unique)
 
-# iterating through and detecting if the unicode exists within the list of unicodes of a given word
-for (i in seq_along(unicode_list)) {
-  u <- unicode_list[i]
-  unicode_proportions[[i]] <- data.frame(
-    unicode = u,
-    count = sum(str_detect(unique[["Jamo_Cleaned_Unicode"]], fixed(u))),
-    prop_included = mean(str_detect(unique[["Jamo_Cleaned_Unicode"]], fixed(u))),
-    stringsAsFactors = FALSE
+unicode_df_unweighted <- unicode_count |>
+  group_by(uc) |>
+  summarize(
+    words_affected = n(), 
+    prop_removed = words_affected / total_unique_words,
+    .groups = "drop"
   )
-}
 
-unicode_df <- bind_rows(unicode_proportions)
-
-# plotting data
-unicode_proportions <- ggplot(unicode_df, aes(x = reorder(unicode, prop_included), y = prop_included)) +
+jamo_unweighted_proportions <- ggplot(unicode_df_unweighted, aes(x = reorder(uc, prop_removed), y = prop_removed)) +
   geom_col() +
   coord_flip() +
   theme_minimal() +
+  scale_y_continuous(labels = scales::percent) +
   labs(
-    y = "Proportion Included",
+    y = "Proportion of Hangul Lost",
     x = "Jamo Unicode",
-    title = "Proportion of Each Jamo Unicode in the Dataset"
+    title = "Effect of Jamo Unicode Removal on Hangul (Unweighted by Word Frequencies)",
   )
 
-ggsave("unicode_proportions.pdf", plot = unicode_proportions, width = 8, height = 6)
+ggsave("jamo_unweighted_proportions.pdf", plot = jamo_unweighted_proportions, width = 8, height = 6)
 
-unicode_counts <- ggplot(unicode_df, aes(x = reorder(unicode, count), y = count)) +
+#############################################################################################################################
+
+# FREQUENCY PLOT
+
+unicode_counts_total <- unique |>
+  mutate(uc = str_extract_all(Jamo_Cleaned_Unicode, "U\\+[0-9A-F]{4}")) |>
+  unnest(uc)
+
+unicode_df_total <- unicode_counts_total |>
+  group_by(uc) |>
+  summarize(
+    total_freq = n(),
+    prop_of_all_jamo = total_freq / total_unique_words,
+    .groups = "drop"
+  )
+  
+jamo_unweighted_frequency <- ggplot(unicode_df_total, aes(x = reorder(uc, total_freq), y = total_freq)) +
   geom_col() +
   geom_text(
-    aes(label = count),
+    aes(label = comma(total_freq)),
     hjust = -0.1,
-    size = 2,
+    size = 3,
     fontface = "italic"
   ) +
   coord_flip() +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
   theme_minimal() +
+  scale_y_continuous(labels = label_comma(),
+                     expand = expansion(mult = c(0, 0.1))) +
   labs(
-    y = "Total Counts",
+    y = "Jamo Unicode Frequencies",
     x = "Jamo Unicode",
-    title = "Counts of Each Jamo Unicode in the Dataset"
+    title = "Total Instances of Jamo Unicodes (Unweighted by Word Frequencies)",
   )
 
-ggsave("unicode_counts.pdf", plot = unicode_counts, width = 8, height = 6)
+ggsave("jamo_unweighted_frequency.pdf", plot = jamo_unweighted_frequency, width = 8, height = 6)
 
+
+# WEIGHTED
+#------------------------------------------------------------------------------------------------------------
+# PROPORTION PLOT
+
+# find frequency of each unicode (modified to count each unicode only once per word)
+unicode_freq_2 <- clean_unique |>
+  mutate(uni = str_extract_all(Jamo_Cleaned_Unicode, "U\\+[0-9A-F]{4}")) |>
+  mutate(uni = purrr::map(uni, \(x) base::unique(x))) |> 
+  unnest(uni) |>
+  group_by(uni) |>
+  summarize(total_freq = sum(total_instances), .groups = "drop")
+
+total_counts <- sum(clean_unique$total_instances, na.rm = TRUE)
+
+unicode_freq_2 <- unicode_freq_2 |>
+  mutate(
+    prop = total_freq / total_counts
+  )
+
+# lowkey more interpretable as a table
+
+clean_uni_freq_2 <- unicode_freq_2 |>
+  ggplot(aes(x = reorder(uni, prop), y = prop)) +
+  geom_col() +
+  coord_flip() +
+  scale_y_continuous(labels = scales::percent) +
+  theme_minimal() +
+  labs(
+    x = "Jamo Unicode",
+    y = "Proportion of Hangul Lost",
+    title = "Effect of Jamo Unicode Removal on Hangul (Weighted by Word Frequencies)"
+  )
+
+ggsave("jamo_weighted_proportion.pdf", plot = clean_uni_freq_2, width = 8, height = 6)
+
+#############################################################################################################################
+
+# FREQUENCY PLOT
+
+# find frequency of each unicode
+unicode_freq <- clean_unique |>
+  mutate(uni = str_extract_all(Jamo_Cleaned_Unicode, "U\\+[0-9A-F]{4}")) |>
+  unnest(uni) |>
+  group_by(uni) |>
+  summarize(total_freq = sum(total_instances), .groups = "drop")
+
+# calculate the proportion
+unicode_freq <- unicode_freq |>
+  mutate(
+    prop = total_freq / sum(total_freq)
+    )
+
+clean_uni_freq <- unicode_freq |>
+  ggplot(aes(x = reorder(uni, total_freq), y = total_freq)) +
+  geom_col() +
+  geom_text(
+    aes(label = comma(total_freq)),
+    hjust = -0.1,
+    size = 2.5,
+    fontface = "italic"
+  ) +
+  coord_flip() +
+  scale_y_continuous(label = label_comma(),
+                     expand = expansion(mult = c(0, 0.1))) +
+  theme_minimal() +
+  labs(
+    x = "Jamo Unicode",
+    y = "Jamo Unicode Frequencies",
+    title = "Total Instances of Jamo Unicodes (Weighted by Word Frequencies)"
+  )
+
+ggsave("jamo_weighted_frequency.pdf", plot = clean_uni_freq, width = 8, height = 6)
 ```
 
 ```{r}
@@ -225,77 +330,6 @@ rule_counts <- ggplot(rule_proportion_df, aes(x = reorder(rule, counts), y = cou
 ggsave("rule_counts.pdf", plot = rule_counts, width = 8, height = 6)
 
 ```
-
-Working with frequency values rather than the unique word set to account for relevance and usage of certain words for more realistic distributions.
-
-```{r}
-# dataset with only values with frequency and proportions
-clean_unique <- unique |>
-  filter(!is.na(total_instances), !is.na(freq))
-
-# dataset with only values without frequency and proportions
-na_unique <- unique |>
-  filter(is.na(total_instances), is.na(freq))
-```
-
-
-```{r}
-# find frequency of each unicode
-unicode_freq <- clean_unique |>
-  mutate(uni = str_extract_all(Jamo_Cleaned_Unicode, "U\\+[0-9A-F]{4}")) |>
-  unnest(uni) |>
-  group_by(uni) |>
-  summarize(total_freq = sum(total_instances), .groups = "drop")
-
-# calculate the proportion
-unicode_freq <- unicode_freq |>
-  mutate(
-    prop = total_freq / sum(total_freq)
-    )
-
-unicode_freq |>
-  summarize(sum = sum(prop))
-
-# contains 1053565	instances of all words 
-clean_unique |>
-  summarize(sum = sum(freq))
-
-# make plot based on proportions
-clean_uni_proportions <- unicode_freq |>
-  ggplot(aes(x = reorder(uni, prop), y = prop)) +
-  geom_col() +
-  coord_flip() +
-  theme_minimal() +
-  labs(
-    x = "Unicode",
-    y = "Unicode Proportion",
-    title = "Unicode Frequency (Weighted by Word Frequencies)"
-  )
-
-ggsave("clean_uni_proportions.pdf", plot = clean_uni_proportions, width = 8, height = 6)
-
-
-clean_uni_freq <- unicode_freq |>
-  ggplot(aes(x = reorder(uni, total_freq), y = total_freq)) +
-  geom_col() +
-  geom_text(
-    aes(label = total_freq),
-    hjust = -0.1,
-    size = 2,
-    fontface = "italic"
-  ) +
-  coord_flip() +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
-  theme_minimal() +
-  labs(
-    x = "Unicode",
-    y = "Unicode Frequencies",
-    title = "Unicode Frequency (Weighted by Word Frequencies)"
-  )
-
-ggsave("clean_uni_frequencies.pdf", plot = clean_uni_freq, width = 8, height = 6)
-```
-
 
 ```{r}
 # pull rules from Matrix column names
