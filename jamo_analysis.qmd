@@ -321,7 +321,7 @@ ipa_clean_uni_freq_2 <- unicode_freq_2 |>
   labs(
     x = "IPA Syllable Unicode",
     y = "Proportion of Hangul Lost",
-    title = "Effect of IPA Syllabel Removal on Hangul (Weighted by Word Frequencies)"
+    title = "Effect of IPA Syllable Removal on Hangul (Weighted by Word Frequencies)"
   )
 
 ggsave("ipa_weighted_proportion.pdf", plot = ipa_clean_uni_freq_2, width = 8, height = 6)
@@ -365,123 +365,162 @@ ipa_clean_uni_freq <- unicode_freq |>
 ggsave("ipa_weighted_frequency.pdf", plot = ipa_clean_uni_freq, width = 8, height = 6)
 ```
 
+Glyph Best Rules Analysis
 
 ```{r}
+# RULE UNICODE ANALYSIS
+########################################################################################################################################
+
+# UNWEIGHTED
+#------------------------------------------------------------------------------------------------------------
+# PROPORTION PLOT
+
 # creating list of names based on column names of the matrices
 rules <- colnames(unique$Jamo_Rule_Matrix[[1]])[-1]
 
-# preallocation of the list of proportions
-rule_proportions <- vector("list", length(rules))
-
+rule_results <- vector("list", length(rules))
 
 # iterating through each rule and detecting if the matrices contain the rule
 for (i in seq_along(rules)) {
   r <- rules[i]
-  contains_rule <- map_lgl(unique$Jamo_Rule_Matrix, ~ any(.x[, r] == 1))
-  count_removed <- sum(contains_rule)
-  proportion_removed <- mean(contains_rule)
-  rule_proportions[[i]] <- tibble(
+  
+  # proportion of unique words affected
+  contains_rule <- map_lgl(unique$Jamo_Rule_Matrix, function(x) {
+    col_vec <- as.numeric(x[[r]])
+    any(col_vec == 1, na.rm = TRUE)
+  })
+  
+  # total count of every instance
+  total_rule_instances <- map_dbl(unique$Jamo_Rule_Matrix, function(x) {
+    col_vec <- as.numeric(x[[r]])
+    sum(col_vec, na.rm = TRUE)
+  })
+  
+  rule_results[[i]] <- tibble(
     rule = r,
-    counts = count_removed,
-    prop_removed = proportion_removed
+    unique_words_affected = sum(contains_rule),
+    prop_removed = mean(contains_rule),
+    total_frequency = sum(total_rule_instances)
   )
 }
 
-rule_proportion_df <- bind_rows(rule_proportions)
-
+rule_df <- bind_rows(rule_results)
 
 # plotting df
-rule_proportions <- ggplot(rule_proportion_df, aes(x = reorder(rule, prop_removed), y = prop_removed)) +
+rule_proportions <- rule_df |>
+  ggplot(aes(x = reorder(rule, prop_removed), y = prop_removed)) +
   geom_col() +
   coord_flip() +
   theme_minimal() +
   labs(
-    y = "Proportion Removed",
-    x = "Rules",
-    title = "Proportion of Each Rule in the Dataset"
+    x = "Glyph Rules",
+    y = "Proportion of Hangul Lost",
+    title = "Effect of Rule Removal on Hangul (Unweighted by Word Frequency)"
   )
 
-ggsave("rule_proportions.pdf", plot = rule_proportions, width = 8, height = 6)
+ggsave("rule_unweighted_proportions.pdf", plot = rule_proportions, width = 8, height = 6)
 
-rule_counts <- ggplot(rule_proportion_df, aes(x = reorder(rule, counts), y = counts)) +
+#############################################################################################################################
+
+# FREQUENCY PLOT
+
+rule_unweighted_frequency <- rule_df |>
+  ggplot(aes(x = reorder(rule, total_frequency), y = total_frequency)) +
   geom_col() +
   geom_text(
-    aes(label = counts),
+    aes(label = comma(total_frequency)),
     hjust = -0.1,
-    size = 2,
+    size = 2.5,
     fontface = "italic"
   ) +
   coord_flip() +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  scale_y_continuous(labels = label_comma(),
+                     expand = expansion(mult = c(0, 0.1))) +
   theme_minimal() +
   labs(
-    y = "Total Counts",
-    x = "Rules",
-    title = "Count of Each Rule in the Dataset"
+    x = "Glyph Rules",
+    y = "Rule Frequencies",
+    title = "Total Instances of Glyph Rules (Unweighted by Word Frequencies)",
   )
 
-ggsave("rule_counts.pdf", plot = rule_counts, width = 8, height = 6)
+# Save the plot
+ggsave("rule_unweighted_frequency.pdf", plot = rule_unweighted_frequency, width = 8, height = 6)
 
-```
+# WEIGHTED
+#------------------------------------------------------------------------------------------------------------
+# PROPORTION PLOT
 
-```{r}
-# pull rules from Matrix column names
-clean_uni_rule_proportions <- vector("list", length(rules))
+clean_rule_results <- vector("list", length(rules))
 
-# iterate through each rule and check in the word list with only frequency values to find proportion of words removed based on rule
-total_freq <- sum(clean_unique$total_instances, na.rm = TRUE)
+total_corpus_instances <- sum(clean_unique$total_instances, na.rm = TRUE)
 
+# iterating through each rule and calculating weighted impact
 for (i in seq_along(rules)) {
   r <- rules[i]
   
-  contains_rule <- map_lgl(clean_unique$Jamo_Rule_Matrix, ~ any(.x[, r] == 1))
-  counts <- sum(clean_unique$total_instances[contains_rule], na.rm = TRUE)
-  weighted_prop <- sum(clean_unique$total_instances[contains_rule], na.rm = TRUE) / total_freq
+  contains_rule <- map_lgl(clean_unique$Jamo_Rule_Matrix, function(x) {
+    col_vec <- as.numeric(x[[r]])
+    any(col_vec == 1, na.rm = TRUE)
+  })
   
-  clean_uni_rule_proportions[[i]] <- tibble(
+  instances_per_word <- map_dbl(clean_unique$Jamo_Rule_Matrix, function(x) {
+    col_vec <- as.numeric(x[[r]])
+    sum(col_vec, na.rm = TRUE)
+  })
+  
+  clean_rule_results[[i]] <- tibble(
     rule = r,
-    counts = counts,
-    prop_weighted = weighted_prop
+    total_weighted_freq = sum(instances_per_word * clean_unique$total_instances, na.rm = TRUE),
+    weighted_words_affected = sum(clean_unique$total_instances[contains_rule], na.rm = TRUE),
+    prop_removed = sum(clean_unique$total_instances[contains_rule], na.rm = TRUE) / total_corpus_instances
   )
 }
 
-clean_uni_rule_proportion_df <- bind_rows(clean_uni_rule_proportions)
+clean_rule_df <- bind_rows(clean_rule_results)
 
-clean_uni_rule_prop <- clean_uni_rule_proportion_df |>
-  ggplot(aes(x = reorder(rule, prop_weighted), y = prop_weighted)) +
+# plotting Weighted Proportion
+rule_weighted_proportions <- clean_rule_df |>
+  ggplot(aes(x = reorder(rule, prop_removed), y = prop_removed)) +
   geom_col() +
   coord_flip() +
+  scale_y_continuous(labels = scales::percent) +
   theme_minimal() +
   labs(
-    x = "Rule",
-    y = "Rule Proportion",
-    title = "Rule Proportions (Weighted by Word Frequencies)"
+    x = "Glyph Rules",
+    y = "Proportion of Hangul Lost",
+    title = "Effect of Rule Removal on Hangul (Weighted by Word Frequency)"
   )
 
-ggsave("clean_uni_rule_prop.pdf", plot = clean_uni_rule_prop, width = 8, height = 6)
+ggsave("rule_weighted_proportions.pdf", plot = rule_weighted_proportions, width = 8, height = 6)
 
-clean_uni_rule_count <- clean_uni_rule_proportion_df |>
-  ggplot(aes(x = reorder(rule, counts), y = counts)) +
+#############################################################################################################################
+
+# FREQUENCY PLOT
+
+# find frequency of each unicode
+rule_weighted_frequency <- clean_rule_df |>
+  ggplot(aes(x = reorder(rule, total_weighted_freq), y = total_weighted_freq)) +
   geom_col() +
   geom_text(
-    aes(label = counts),
+    aes(label = comma(total_weighted_freq)),
     hjust = -0.1,
-    size = 2,
+    size = 2.5,
     fontface = "italic"
   ) +
   coord_flip() +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  scale_y_continuous(labels = label_comma(),
+                     expand = expansion(mult = c(0, 0.15))) +
   theme_minimal() +
   labs(
-    x = "Rule",
-    y = "Rule Count",
-    title = "Rule Count (Weighted by Word Frequencies)"
+    x = "Glyph Rules",
+    y = "Rule Frequencies",
+    title = "Total Instances of Glyph Rules (Weighted by Word Frequencies)",
   )
 
-ggsave("clean_uni_rule_count.pdf", plot = clean_uni_rule_count, width = 8, height = 6)
-
-
+# Save the plot
+ggsave("rule_weighted_frequency.pdf", plot = rule_weighted_frequency, width = 8, height = 6)
 ```
+
 
 ```{r}
 # GRAMMATICAL PARTS
