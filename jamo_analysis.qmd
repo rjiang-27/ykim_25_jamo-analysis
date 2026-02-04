@@ -5,8 +5,6 @@ format: pdf
 editor: visual
 ---
 
-
-
 ```{r}
 library(maps)
 library(tidyverse)
@@ -61,11 +59,12 @@ clean_unique <- unique |>
   filter(!is.na(total_instances), !is.na(freq))
 
 # dataset with only values without frequency and proportions
-na_unique <- unique |>
-  filter(is.na(total_instances), is.na(freq))
+#na_unique <- unique |>
+#  filter(is.na(total_instances), is.na(freq))
 ```
 
 Jamo Unicode Analysis
+
 ```{r}
 # JAMO UNICODE ANALYSIS
 ########################################################################################################################################
@@ -215,63 +214,157 @@ clean_uni_freq <- unicode_freq |>
 ggsave("jamo_weighted_frequency.pdf", plot = clean_uni_freq, width = 8, height = 6)
 ```
 
+IPA Unicode Analysis
+
 ```{r}
-# creates a list of all of the existing IPA Unicodes
-ipa_unicode_list <- unique |>
+# IPA UNICODE ANALYSIS
+########################################################################################################################################
+
+# UNWEIGHTED
+#------------------------------------------------------------------------------------------------------------
+# PROPORTION PLOT
+
+unicode_count <- unique |>
+  mutate(word_id = row_number()) |>
   mutate(uc = str_extract_all(IPA_Syllable_Unicode, "U\\+[0-9A-F]{4}")) |>
   unnest(uc) |>
-  distinct(uc) |>
-  pull(uc)
+  # keep only one instance of a unicode per word
+  distinct(word_id, uc, .keep_all = TRUE) 
 
-# preallocation of list size
-ipa_unicode_proportions <- vector("list", length(ipa_unicode_list))
+total_unique_words <- nrow(unique)
 
-# iterating through and detecting if the IPA unicode exists within the list of unicodes of a given word
-for (i in seq_along(ipa_unicode_list)) {
-  u <- ipa_unicode_list[i]
-  ipa_unicode_proportions[[i]] <- data.frame(
-    unicode = u,
-    count = sum(str_detect(unique[["IPA_Syllable_Unicode"]], fixed(u))),
-    prop_included = mean(str_detect(unique[["IPA_Syllable_Unicode"]], fixed(u))),
-    stringsAsFactors = FALSE
+unicode_df_unweighted <- unicode_count |>
+  group_by(uc) |>
+  summarize(
+    words_affected = n(), 
+    prop_removed = words_affected / total_unique_words,
+    .groups = "drop"
   )
-}
 
-ipa_unicode_df <- bind_rows(ipa_unicode_proportions)
-
-# plotting data
-ipa_unicode_proportions <- ggplot(ipa_unicode_df, aes(x = reorder(unicode, prop_included), y = prop_included)) +
+ipa_unweighted_proportions <- ggplot(unicode_df_unweighted, aes(x = reorder(uc, prop_removed), y = prop_removed)) +
   geom_col() +
   coord_flip() +
   theme_minimal() +
+  scale_y_continuous(labels = scales::percent) +
   labs(
-    y = "Proportion Included",
-    x = "IPA Unicode",
-    title = "Proportion of Each IPA Unicode in the Dataset"
+    y = "Proportion of Hangul Lost",
+    x = "IPA Syllable Unicode",
+    title = "Effect of IPA Syllable Removal on Hangul (Unweighted by Word Frequencies)",
   )
 
-ggsave("ipa_unicode_proportions.pdf", plot = ipa_unicode_proportions, width = 8, height = 6)
+ggsave("ipa_unweighted_proportions.pdf", plot = ipa_unweighted_proportions, width = 8, height = 6)
 
-ipa_unicode_counts <- ggplot(ipa_unicode_df, aes(x = reorder(unicode, count), y = count)) +
+#############################################################################################################################
+
+# FREQUENCY PLOT
+
+unicode_counts_total <- unique |>
+  mutate(uc = str_extract_all(IPA_Syllable_Unicode, "U\\+[0-9A-F]{4}")) |>
+  unnest(uc)
+
+unicode_df_total <- unicode_counts_total |>
+  group_by(uc) |>
+  summarize(
+    total_freq = n(),
+    prop_of_all_jamo = total_freq / total_unique_words,
+    .groups = "drop"
+  )
+  
+ipa_unweighted_frequency <- ggplot(unicode_df_total, aes(x = reorder(uc, total_freq), y = total_freq)) +
   geom_col() +
   geom_text(
-    aes(label = count),
+    aes(label = comma(total_freq)),
     hjust = -0.1,
-    size = 2,
+    size = 3,
     fontface = "italic"
   ) +
   coord_flip() +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
   theme_minimal() +
+  scale_y_continuous(labels = label_comma(),
+                     expand = expansion(mult = c(0, 0.1))) +
   labs(
-    y = "Total Counts",
-    x = "IPA Unicode",
-    title = "Counts of Each IPA Unicode in the Dataset"
+    y = "IPA Syllable Frequencies",
+    x = "IPA Syllable Unicode",
+    title = "Total Instances of IPA Syllables (Unweighted by Word Frequencies)",
   )
 
-ggsave("ipa_unicode_counts.pdf", plot = ipa_unicode_counts, width = 8, height = 6)
+ggsave("ipa_unweighted_frequency.pdf", plot = ipa_unweighted_frequency, width = 8, height = 6)
 
+
+# WEIGHTED
+#------------------------------------------------------------------------------------------------------------
+# PROPORTION PLOT
+
+# find frequency of each unicode (modified to count each unicode only once per word)
+unicode_freq_2 <- clean_unique |>
+  mutate(uni = str_extract_all(IPA_Syllable_Unicode, "U\\+[0-9A-F]{4}")) |>
+  mutate(uni = purrr::map(uni, \(x) base::unique(x))) |> 
+  unnest(uni) |>
+  group_by(uni) |>
+  summarize(total_freq = sum(total_instances), .groups = "drop")
+
+total_counts <- sum(clean_unique$total_instances, na.rm = TRUE)
+
+unicode_freq_2 <- unicode_freq_2 |>
+  mutate(
+    prop = total_freq / total_counts
+  )
+
+# lowkey more interpretable as a table
+
+ipa_clean_uni_freq_2 <- unicode_freq_2 |>
+  ggplot(aes(x = reorder(uni, prop), y = prop)) +
+  geom_col() +
+  coord_flip() +
+  scale_y_continuous(labels = scales::percent) +
+  theme_minimal() +
+  labs(
+    x = "IPA Syllable Unicode",
+    y = "Proportion of Hangul Lost",
+    title = "Effect of IPA Syllabel Removal on Hangul (Weighted by Word Frequencies)"
+  )
+
+ggsave("ipa_weighted_proportion.pdf", plot = ipa_clean_uni_freq_2, width = 8, height = 6)
+
+#############################################################################################################################
+
+# FREQUENCY PLOT
+
+# find frequency of each unicode
+unicode_freq <- clean_unique |>
+  mutate(uni = str_extract_all(IPA_Syllable_Unicode, "U\\+[0-9A-F]{4}")) |>
+  unnest(uni) |>
+  group_by(uni) |>
+  summarize(total_freq = sum(total_instances), .groups = "drop")
+
+# calculate the proportion
+unicode_freq <- unicode_freq |>
+  mutate(
+    prop = total_freq / sum(total_freq)
+    )
+
+ipa_clean_uni_freq <- unicode_freq |>
+  ggplot(aes(x = reorder(uni, total_freq), y = total_freq)) +
+  geom_col() +
+  geom_text(
+    aes(label = comma(total_freq)),
+    hjust = -0.1,
+    size = 2.5,
+    fontface = "italic"
+  ) +
+  coord_flip() +
+  scale_y_continuous(label = label_comma(),
+                     expand = expansion(mult = c(0, 0.1))) +
+  theme_minimal() +
+  labs(
+    x = "IPA Syllable Unicode",
+    y = "IPA Syllable Frequencies",
+    title = "Total Instances of IPA Syllables (Weighted by Word Frequencies)"
+  )
+
+ggsave("ipa_weighted_frequency.pdf", plot = ipa_clean_uni_freq, width = 8, height = 6)
 ```
+
 
 ```{r}
 # creating list of names based on column names of the matrices
@@ -390,7 +483,6 @@ ggsave("clean_uni_rule_count.pdf", plot = clean_uni_rule_count, width = 8, heigh
 
 ```
 
-
 ```{r}
 # GRAMMATICAL PARTS
 
@@ -449,7 +541,6 @@ walk(grammatical_parts, function(part) {
 })
 ```
 
-
 ```{r}
 # Grammatical Parts by Jamo Unicode
 
@@ -498,8 +589,6 @@ walk(grammatical_parts, function(parts) {
 
 
 ```
-
-
 
 ```{r}
 # WORD ORIGINS
@@ -605,7 +694,3 @@ walk(word_origins, function(origin) {
   print(p)
 })
 ```
-
-
-
-
