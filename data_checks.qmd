@@ -11,7 +11,7 @@ library(stringr)
 library(dplyr)
 library(purrr)
 
-unique <- readRDS("~/YKim-Linguistics/ykim_korean-analysis/unique_database.rds")
+# unique <- readRDS("~/YKim-Linguistics/ykim_korean-analysis/unique_database.rds")
 ```
 
 ```{r}
@@ -25,4 +25,30 @@ unique_check <- unique |>
 unique_check |>
   filter(equal_length == FALSE)
 ```
+
+
+```{r}
+unique_2 <- unique |>
+  mutate(
+    IPA_Syllable_Unicode = str_replace_all(
+      IPA_Syllable_Unicode,
+      "\\s*,\\s*",
+      ""
+    )
+  )
+
+unique_unicodes <- unique_2 |>
+  separate_rows(IPA_Syllable_Unicode, sep = " ") |>
+  distinct(IPA_Syllable_Unicode) |>
+  arrange(IPA_Syllable_Unicode)
+
+saveRDS(unique_2, file = "unique_database_cleaned_ipa.rds")
+saveRDS(unique_unicodes, file = "ipa_list.rds")
+```
+
+
+
+
+
+
 
